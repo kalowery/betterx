@@ -1,0 +1,15 @@
+# Exported posts and classifications (other people's content; never publish)
+*.json
+!manifest.json
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Local tooling and build artifacts
+.claude/
+.DS_Store
+*.zip
+*.crx

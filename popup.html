@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px -apple-system, system-ui, sans-serif; width: 400px; margin: 10px; }
+  h1 { font-size: 14px; margin: 0 0 6px; }
+  .row { display: flex; gap: 6px; margin: 8px 0; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; padding: 3px 8px; }
+  ul { list-style: none; padding: 0; margin: 0; max-height: 360px; overflow: auto; }
+  li { border-top: 1px solid #ddd; padding: 6px 0; }
+  .meta { color: #666; font-size: 11px; }
+  .kind { font-weight: 600; }
+  .flag { color: #f4212e; font-weight: 600; }
+  #warn { color: #c47800; }
+</style>
+</head>
+<body>
+  <h1>X Post Classifier</h1>
+  <div id="counts">Loading…</div>
+  <div id="warn"></div>
+  <div class="row">
+    <label><input type="checkbox" id="enabled"> Classify posts</label>
+    <button id="settings">Settings…</button>
+    <button id="export">Export JSON</button>
+    <button id="clear">Clear captured</button>
+  </div>
+  <ul id="list"></ul>
+  <script src="settings.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
