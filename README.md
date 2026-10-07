@@ -2,7 +2,7 @@
 
 A Chrome/Brave extension that reads posts and replies as you browse x.com, classifies each one with [TypeSafe](https://typesafe.ai)'s low-latency **Jev** classifier, and labels, dims, blurs, or hides it according to rules you choose. You can see what a post is before reading it.
 
-For each post Jev answers six questions in one request (about 150–250 ms):
+For each post Jev answers seven questions in one request (about 150–250 ms):
 
 | Question | Answer |
 |---|---|
@@ -10,10 +10,13 @@ For each post Jev answers six questions in one request (about 150–250 ms):
 | Post type | opinion / factual claim / news / joke / personal / other |
 | Argument quality | score from 0 (none) to 4 (strong) |
 | Racist | likelihood 0–100% |
+| Contempt for a nationality or immigrants | likelihood 0–100% |
 | Antisemitic | likelihood 0–100% |
 | Sexually explicit | likelihood 0–100% |
 
 The author's own text is judged; a quoted post is passed along as context only.
+
+"Racist" is defined narrowly: claims of racial or ethnic superiority or inferiority, slurs, treating crime or bad character as inherent to a race, and calls to harm or exclude people because of race. Positions on immigration, borders, deportation, or crime don't count on their own. Contempt for immigrants or nationalities as groups ("invaders", "shithole countries") is a separate category, so you can treat it differently.
 
 ## What you see
 
@@ -26,7 +29,7 @@ The author's own text is judged; a quoted post is passed along as context only.
 
 Open the toolbar popup → **Settings…** (or right-click the extension icon → Options).
 
-- **Content rules.** For each category (racist, antisemitic, sexually explicit, insulting tone) choose a *likely* threshold and a *possible* threshold, and what to do at each: nothing, label, dim, blur, or hide. When several rules match, the strongest action wins (hide > blur > dim > label).
+- **Content rules.** For each category (racist, contempt for a nationality or immigrants, antisemitic, sexually explicit, insulting tone) choose a *likely* threshold and a *possible* threshold, and what to do at each: nothing, label, dim, blur, or hide. When several rules match, the strongest action wins (hide > blur > dim > label).
 - **Weak arguments.** Optionally dim, blur, or hide posts with argument quality at or below a score you pick.
 - **Labels.** Show or hide the tone, post type, and argument quality labels.
 - **API key, on/off switch, Test button, and data reset.**
@@ -36,6 +39,7 @@ Defaults:
 | Category | Likely (≥70%) | Possible (≥40%) |
 |---|---|---|
 | Racist | Hide | Label |
+| Contempt for a nationality or immigrants | Label | Nothing |
 | Antisemitic | Hide | Label |
 | Sexually explicit | Blur | Label |
 | Insulting tone | Label | Nothing |

@@ -155,7 +155,7 @@ function chips(rec, c, decision, isRevealed) {
     if (settings.chips.quality) box.append(chip(`arg ${a.argument_quality.score.toFixed(1)}/4`, "xpe-quality", "Argument quality (0–4)"));
     for (const r of decision.reasons) {
       const title = (r.level === "likely" ? "Likely: " : "Possibly: ") + r.name.toLowerCase();
-      box.append(chip(r.name + (r.prob != null ? " " + XPE.pct(r.prob) : ""), "xpe-flag xpe-" + r.level, title));
+      box.append(chip(r.short + (r.prob != null ? " " + XPE.pct(r.prob) : ""), "xpe-flag xpe-" + r.level, title));
     }
     if (isRevealed) {
       const h = chip("hide again", "xpe-rehide", "Re-apply your hide/blur setting");

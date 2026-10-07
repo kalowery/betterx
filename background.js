@@ -4,7 +4,7 @@ importScripts("settings.js");
 
 const API = "https://api.typesafe.ai/v1/systemone";
 const MODEL = "jev-latest";
-const QUESTIONS_VERSION = 2; // bump when QUESTIONS change so cached answers are refreshed
+const QUESTIONS_VERSION = 3; // bump when QUESTIONS change so cached answers are refreshed
 const MAX_CACHE = 5000;
 const MAX_CONCURRENT = 6;
 
@@ -46,12 +46,56 @@ const QUESTIONS = {
       "Strong: careful, well-supported, acknowledges complexity",
     ],
   },
+  // Narrow on purpose: an earlier, broader definition flagged ordinary immigration-policy posts.
   racist: {
     type: "noul",
-    instructions: `${CONTEXT} Is the author's text racist?`,
+    instructions:
+      `${CONTEXT} Is the author's text racist, in the narrow sense defined by the criteria? ` +
+      "Positions on immigration, borders, deportation, or crime are not racism unless the text also contains the racist content described.",
     criteria: {
-      true: "Demeans, stereotypes, or expresses hostility toward people based on race or ethnicity",
-      false: "No racist content (discussing or criticizing racism is not itself racist)",
+      true: {
+        means: "The text attacks people because of their race or ethnicity",
+        includes: [
+          "claims that a race or ethnic group is superior, inferior, less intelligent, or less human",
+          "racial or ethnic slurs",
+          "attributing crime, violence, or bad character to an entire race or ethnicity as an inherent trait",
+          "calls to harm, expel, or exclude people because of their race or ethnicity",
+        ],
+      },
+      false: {
+        means: "No racist content",
+        includes: [
+          "opposing immigration, illegal immigration, or open borders",
+          "supporting deportation or stricter enforcement",
+          "reporting, condemning, or wanting punishment for crimes by specific people, including immigrants",
+          "criticizing a country, religion, ideology, party, or government",
+          "insults or anger not based on race or ethnicity",
+          "discussing or criticizing racism or antisemitism",
+        ],
+      },
+    },
+  },
+  group_contempt: {
+    type: "noul",
+    instructions: `${CONTEXT} Does the author's text dehumanize or express contempt for immigrants or people from particular countries as a group?`,
+    criteria: {
+      true: {
+        means: "Contempt for immigrants or nationalities as groups",
+        includes: [
+          "dehumanizing labels such as invaders, vermin, animals, or subhuman applied to immigrants or a nationality as a group",
+          "calling their countries of origin shitholes or similar",
+          "blaming all immigrants or a nationality for crime or social problems",
+        ],
+      },
+      false: {
+        means: "No group contempt",
+        includes: [
+          "policy disagreement about immigration, borders, or enforcement",
+          "supporting deportation of people in the country illegally",
+          "neutral or legal terms such as illegal immigrant or illegal alien",
+          "criticizing or condemning specific individuals for specific crimes",
+        ],
+      },
     },
   },
   antisemitic: {
