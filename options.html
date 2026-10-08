@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>X Post Classifier — Settings</title>
+<title>betterx — Settings</title>
 <style>
   body { font: 14px -apple-system, system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; color: #0f1419; }
   h1 { font-size: 20px; margin-bottom: 4px; }
@@ -25,11 +25,16 @@
 </head>
 <body>
   <div id="status">Saved</div>
-  <h1>X Post Classifier</h1>
-  <p class="sub">Classifies posts on x.com with TypeSafe's Jev and labels, dims, blurs, or hides them by your rules. Changes apply immediately.</p>
+  <h1>betterx</h1>
+  <p class="sub">Classifies posts and comments on X and Facebook with TypeSafe's Jev and labels, dims, blurs, or hides them by your rules. Changes apply immediately.</p>
 
   <h2>General</h2>
   <label><input type="checkbox" id="enabled"> Classify posts</label>
+  <p>
+    Run on:
+    <label><input type="checkbox" data-site="x"> X</label>
+    <label><input type="checkbox" data-site="facebook"> Facebook</label>
+  </p>
   <p>
     TypeSafe API key<br>
     <input type="password" id="apiKey" placeholder="paste key">
@@ -58,7 +63,7 @@
   </p>
 
   <h2>Account location</h2>
-  <p class="sub">Uses X's "About this account" information (where X says an account is based) to label posts or filter accounts from countries you choose.</p>
+  <p class="sub">X only. Uses X's "About this account" information (where X says an account is based) to label posts or filter accounts from countries you choose.</p>
   <p class="warn">This looks up each new account through an unofficial X interface using your logged-in session: one request per account, spaced 1.5 s apart, saved for 30 days. X could rate-limit or flag your account, and the lookup may stop working if X changes it.</p>
   <label><input type="checkbox" id="cEnabled"> Look up where accounts are based</label>
   <label><input type="checkbox" id="cChip"> Show 📍 location label</label>

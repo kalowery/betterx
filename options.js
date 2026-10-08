@@ -35,6 +35,7 @@ function pctInput(value, onchange) {
 
 function render() {
   $("#enabled").checked = settings.enabled;
+  document.querySelectorAll("[data-site]").forEach((cb) => (cb.checked = settings.sites[cb.dataset.site] !== false));
   document.querySelectorAll("[data-chip]").forEach((cb) => (cb.checked = settings.chips[cb.dataset.chip]));
 
   const body = $("#rules");
@@ -122,6 +123,13 @@ $("#enabled").onchange = (e) => {
   settings.enabled = e.target.checked;
   save();
 };
+document.querySelectorAll("[data-site]").forEach(
+  (cb) =>
+    (cb.onchange = () => {
+      settings.sites[cb.dataset.site] = cb.checked;
+      save();
+    }),
+);
 document.querySelectorAll("[data-chip]").forEach(
   (cb) =>
     (cb.onchange = () => {

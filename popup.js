@@ -16,9 +16,9 @@ function render() {
       renderList(`Recently captured on any tab${note ? " — " + note : ""}`, saved);
     };
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-      if (!tab?.url || !/^https:\/\/(x|twitter)\.com\//.test(tab.url)) return fallback("");
+      if (!tab?.url || !/^https:\/\/((x|twitter)\.com|www\.facebook\.com)\//.test(tab.url)) return fallback("");
       chrome.tabs.sendMessage(tab.id, { type: "pagePosts" }, (res) => {
-        if (chrome.runtime.lastError || !res?.ok) return fallback("reload your x.com tab to see its posts here");
+        if (chrome.runtime.lastError || !res?.ok) return fallback("reload this tab to see its posts here");
         renderList(`On this page (${res.posts.length})`, res.posts);
       });
     });
@@ -34,8 +34,8 @@ function renderList(heading, posts) {
       meta.className = "meta";
       const kind = document.createElement("span");
       kind.className = "kind";
-      kind.textContent = p.kind;
-      meta.append(kind, ` · @${p.handle}`);
+      kind.textContent = p.subkind || p.kind;
+      meta.append(kind, p.site === "facebook" ? ` · ${p.displayName || p.handle}` : ` · @${p.handle}`);
       if (p.country) meta.append(` · 📍 ${p.country}`);
       const a = p.answers;
       if (a) meta.append(` · ${a.tone.choice} · ${a.post_type.choice.replace("_", " ")} · arg ${a.argument_quality.score.toFixed(1)}`);

@@ -27,15 +27,17 @@
 .xpe-flag.xpe-possible { background: rgba(255, 173, 31, 0.25); color: rgb(196, 120, 0); }
 .xpe-rehide { cursor: pointer; text-decoration: underline; }
 
-/* Hide / blur / dim. The marker is our own first child of the article. */
-article[data-xpe-action="hide"] > :not(.xpe-marker) { display: none !important; }
-article[data-xpe-action="blur"] > :not(.xpe-marker) {
+/* Hide / blur / dim. The marker is our own first child of the post or comment element. */
+[data-xpe-action="hide"] > :not(.xpe-marker) { display: none !important; }
+/* Blur and dim go on the first descendants that draw a box (set by core.js), since a
+   `display: contents` wrapper can't be blurred or faded. */
+[data-xpe-fx="blur"] {
   filter: blur(10px);
   pointer-events: none;
   user-select: none;
 }
-article[data-xpe-action="dim"] { opacity: 0.35; transition: opacity 0.15s; }
-article[data-xpe-action="dim"]:hover { opacity: 1; }
+[data-xpe-fx="dim"] { opacity: 0.35; transition: opacity 0.15s; }
+[data-xpe-action="dim"]:hover [data-xpe-fx="dim"] { opacity: 1; }
 
 .xpe-marker {
   display: flex;

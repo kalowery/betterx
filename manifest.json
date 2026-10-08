@@ -1,21 +1,54 @@
 {
   "manifest_version": 3,
-  "name": "X Post Classifier (test)",
-  "version": "0.5.0",
-  "description": "Extracts posts on x.com, classifies them with TypeSafe's Jev, and labels, dims, blurs, or hides them by your rules.",
-  "permissions": ["storage"],
-  "host_permissions": ["https://api.typesafe.ai/*", "https://abs.twimg.com/*", "https://x.com/*", "https://twitter.com/*"],
-  "background": { "service_worker": "background.js" },
+  "name": "betterx",
+  "version": "0.6.0",
+  "description": "Classifies posts and comments on X and Facebook with TypeSafe\u2019s Jev, and labels, dims, blurs, or hides them by your rules.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.typesafe.ai/*",
+    "https://abs.twimg.com/*",
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://www.facebook.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["https://x.com/*", "https://twitter.com/*"],
-      "js": ["settings.js", "content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ],
+      "js": [
+        "settings.js",
+        "site-x.js",
+        "core.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.facebook.com/*"
+      ],
+      "js": [
+        "settings.js",
+        "site-facebook.js",
+        "core.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "X Post Classifier",
+    "default_title": "betterx",
     "default_popup": "popup.html"
   },
   "options_page": "options.html"

@@ -9,9 +9,11 @@ const STATS_DAYS = 90; // bump when QUESTIONS change so cached answers are refre
 const MAX_CACHE = 5000;
 const MAX_CONCURRENT = 6;
 
+// Wording changes here don't bump QUESTIONS_VERSION; cached answers stay valid.
 const CONTEXT =
-  "The state is a post from X (Twitter). Judge only `post_text`, which the author wrote. " +
-  "`quoted_post_text`, if present, is someone else's post being quoted and is context only.";
+  "The state is a post or comment from a social network (X or Facebook). Judge only `post_text`, which the author wrote. " +
+  "`quoted_post_text` (someone else's post being quoted) and `replying_to_post_text` (the post a comment replies to), " +
+  "if present, are context only.";
 
 const QUESTIONS = {
   tone: {
@@ -148,6 +150,7 @@ const QUESTIONS = {
 function stateFor(p) {
   const s = { post_text: p.text, author: "@" + p.handle };
   if (p.quotedText) s.quoted_post_text = p.quotedText;
+  if (p.parentText) s.replying_to_post_text = p.parentText;
   if (p.kind === "reply") s.is_reply = true;
   if (p.truncated) s.note = "post_text was cut off by the site; judge what is shown";
   return s;
@@ -229,6 +232,7 @@ async function recordStats(post, entry) {
   const data = await statsBucket.ready;
   data[post.id] = {
     at: entry.at,
+    s: post.site || "x",
     k: post.kind,
     h: post.handle?.toLowerCase(),
     tone: a.tone?.choice,

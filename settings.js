@@ -22,6 +22,7 @@ globalThis.XPE = {
 
   DEFAULTS: {
     enabled: true,
+    sites: { x: true, facebook: true }, // run betterx on these sites
     chips: { tone: true, type: true, quality: true, kind: false },
     rules: {
       racist: { likely: { threshold: 0.7, action: "hide" }, possible: { threshold: 0.4, action: "label" } },
@@ -96,4 +97,7 @@ globalThis.XPE = {
   },
 
   pct: (p) => Math.round(p * 100) + "%",
+
+  // Thrown by a site's account lookup when the site rate-limits; `cause` is the retry time (ms).
+  RateLimited: class extends Error {},
 };

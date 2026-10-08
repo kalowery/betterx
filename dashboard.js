@@ -2,7 +2,7 @@
 // ("xpeStats:YYYY-MM-DD" buckets) and applies the user's current thresholds.
 
 const $ = (s) => document.querySelector(s);
-const state = { days: 7, scope: "all" };
+const state = { days: 7, scope: "all", site: "all" };
 let settings = XPE.DEFAULTS;
 let records = []; // [{ id, at, k, h, tone, type, q, p: {...} }]
 let countries = {}; // handle -> { name }
@@ -62,7 +62,10 @@ async function load() {
   const posts = all.xpePosts || {};
   for (const [id, c] of Object.entries(all.xpeClass || {})) {
     if (byId.has(id) || !c.answers) continue;
-    byId.set(id, { id, k: posts[id]?.kind, h: posts[id]?.handle?.toLowerCase(), ...compactFromAnswers(c.answers, c.at) });
+    byId.set(id, {
+      id, s: posts[id]?.site || (id.startsWith("fb") ? "facebook" : "x"), k: posts[id]?.kind, h: posts[id]?.handle?.toLowerCase(),
+      ...compactFromAnswers(c.answers, c.at),
+    });
   }
   records = [...byId.values()];
   countries = all.xpeCountry || {};
@@ -73,6 +76,7 @@ function filtered() {
   const since = state.days === 1 ? new Date().setHours(0, 0, 0, 0) : Date.now() - state.days * 864e5;
   return records.filter((r) => {
     if (r.at < since) return false;
+    if (state.site !== "all" && (r.s || "x") !== state.site) return false;
     if (state.scope === "replies") return r.k === "reply";
     if (state.scope === "posts") return r.k !== "reply";
     return true;
@@ -180,8 +184,9 @@ function render() {
   const likelyCount = (rule) => scored(rule).filter((r) => level(rule, r.p[rule]) === "likely").length;
 
   const rangeName = { 1: "today", 7: "in the last 7 days", 30: "in the last 30 days", 90: "in the last 90 days" }[state.days];
-  const scopeName = { all: "posts and replies", posts: "posts", replies: "replies" }[state.scope];
-  $("#summary").textContent = `${fmtInt(n)} ${scopeName} classified ${rangeName} (${fmtInt(records.length)} in total).`;
+  const scopeName = { all: "posts and replies", posts: "posts", replies: "replies and comments" }[state.scope];
+  const siteName = { all: "", x: " on X", facebook: " on Facebook" }[state.site];
+  $("#summary").textContent = `${fmtInt(n)} ${scopeName}${siteName} classified ${rangeName} (${fmtInt(records.length)} in total).`;
 
   // KPI row
   const hateRules = ["racist", "group_contempt", "antisemitic", "sexually_explicit"];
@@ -295,6 +300,7 @@ function bindSeg(id, key, parse) {
 }
 bindSeg("range", "days", (b) => Number(b.dataset.days));
 bindSeg("scope", "scope", (b) => b.dataset.scope);
+bindSeg("site", "site", (b) => b.dataset.site);
 
 let reloadTimer = null;
 chrome.storage.onChanged.addListener((changes) => {
