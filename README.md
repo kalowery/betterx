@@ -100,3 +100,7 @@ content.js ── post text ─────────► background.js ── 
 - Posts cut off by "Show more" are classified on the visible text until you open them.
 - Feed replies are detected from the "Replying to" line; on thread pages, everything below the main post counts as a reply.
 - Classifications are probabilistic. Thresholds trade missed posts against false alarms, and the antisemitism question has been the least consistent in testing.
+
+## License
+
+[MIT](LICENSE)
