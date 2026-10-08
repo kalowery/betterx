@@ -62,6 +62,10 @@ Each post counts once, however often you see it. Percentages use your current th
 
 On facebook.com, betterx classifies feed posts and the comments and replies you open, with the same rules, labels, and dashboard as on X. Labels appear after the author's name; hidden or blurred comments get the same Show bar.
 
+![betterx on a Facebook-style page: tone, post type, and argument-quality labels after each name; a "Rage bait 88%" flag on one post; a comment hidden as racist with a Show button; and a post blurred as sexually explicit](docs/facebook-demo.png)
+
+*Demo page with fictional people and posts, laid out with Facebook's markup and run through the real betterx content scripts using fixed classifications.*
+
 Facebook's page markup uses generated class names that change often, so betterx relies on the few stable markers in it: `data-ad-rendering-role="story_message"` and `"profile_name"` for a post's text and author, the post's `aria-labelledby` container, and `role="article"` elements with a `comment_id` link for comments. Photo- or video-only posts, and sticker-only comments, have no text and are skipped. Sponsored posts can't be told apart reliably (Facebook scrambles that label) and are classified like any other post. The account location filter is X-only: Facebook has no equivalent for personal profiles.
 
 ## Account location filter (X only; optional, off by default)
