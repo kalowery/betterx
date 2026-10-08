@@ -7,6 +7,7 @@ globalThis.XPE = {
     antisemitic: "Antisemitic",
     sexually_explicit: "Sexually explicit",
     insulting: "Insulting tone",
+    rage_bait: "Rage bait",
   },
   // Shorter names for the labels next to the author's name.
   SHORT: { group_contempt: "Group contempt" },
@@ -28,6 +29,8 @@ globalThis.XPE = {
       antisemitic: { likely: { threshold: 0.7, action: "hide" }, possible: { threshold: 0.4, action: "label" } },
       sexually_explicit: { likely: { threshold: 0.7, action: "blur" }, possible: { threshold: 0.4, action: "label" } },
       insulting: { likely: { threshold: 0.7, action: "label" }, possible: { threshold: 0.4, action: "none" } },
+      // Common in political feeds (about a third of posts score >= 70%), so "likely" starts higher.
+      rage_bait: { likely: { threshold: 0.8, action: "label" }, possible: { threshold: 0.6, action: "none" } },
     },
     lowQuality: { action: "none", maxScore: 0.5 },
     // Filter by the country X reports in "About this account". Off by default because it

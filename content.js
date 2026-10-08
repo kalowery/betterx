@@ -268,8 +268,25 @@ function saveCountry(h, info) {
   }, 2000);
 }
 
+// The popup asks the active tab for the posts it's showing now, in page order.
+function pagePosts() {
+  const out = [];
+  const ids = new Set();
+  for (const article of document.querySelectorAll(SEL.post)) {
+    const id = permalink(article)?.id;
+    const rec = id && seen.get(id);
+    if (!rec || ids.has(id)) continue;
+    ids.add(id);
+    const c = cls.get(id);
+    const k = countries.get(rec.handle.toLowerCase());
+    out.push({ ...rec, answers: c?.state === "done" ? c.result.answers : null, country: k?.state === "done" ? k.name : null });
+  }
+  return out;
+}
+
 // Test button on the settings page (forwarded here by the background worker).
 chrome.runtime.onMessage.addListener((msg, _sender, send) => {
+  if (msg.type === "pagePosts") return send({ ok: true, posts: pagePosts(), url: location.href });
   if (msg.type !== "countryTest") return;
   lookupCountry(msg.handle.trim().replace(/^@/, "").toLowerCase()).then(
     (result) => send({ ok: true, result }),

@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>betterx — Feed mood</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --bar: #2a78d6;          /* sequential blue 450 */
+    --bar-weak: #86b6ef;     /* blue 250: "possible" step */
+    --hover-wash: rgba(11, 11, 11, 0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface-1: #1a1a19;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --baseline: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --bar: #3987e5;        /* blue 400 */
+      --bar-weak: #184f95;   /* blue 600 */
+      --hover-wash: rgba(255, 255, 255, 0.05);
+    }
+  }
+  html, body { margin: 0; }
+  body.viz-root { background: var(--page); color: var(--text-primary); font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 20px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+  .sub { color: var(--text-secondary); margin: 0 0 16px; }
+  .muted { color: var(--text-muted); font-size: 12px; }
+
+  /* filters: one row, above everything they scope */
+  .filters { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 9999px; overflow: hidden; }
+  .seg button { font: inherit; border: 0; background: transparent; color: var(--text-secondary); padding: 4px 12px; cursor: pointer; }
+  .seg button:hover { background: var(--hover-wash); }
+  .seg button[aria-pressed="true"] { color: var(--text-primary); font-weight: 600; background: var(--hover-wash); }
+
+  /* KPI row */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .tile .label { color: var(--text-secondary); font-size: 13px; }
+  .tile .value { font-size: 28px; font-weight: 600; margin-top: 4px; }
+  .tile .note { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+
+  /* chart cards */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 12px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .card h2 { font-size: 15px; margin: 0; font-weight: 600; }
+  .card .desc { color: var(--text-secondary); font-size: 12px; margin: 2px 0 12px; }
+  .legend { display: flex; gap: 14px; color: var(--text-secondary); font-size: 12px; margin: -4px 0 10px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+  /* horizontal bar rows */
+  .row { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 10px; padding: 3px 4px; border-radius: 6px; outline: none; }
+  .row:hover, .row:focus-visible { background: var(--hover-wash); }
+  .row .name { color: var(--text-secondary); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track { display: flex; align-items: center; height: 24px; border-left: 1px solid var(--baseline); }
+  .bar { height: 16px; background: var(--bar); }
+  .bar.weak { background: var(--bar-weak); margin-left: 2px; } /* 2px surface gap between stacked segments */
+  .bar.end { border-radius: 0 4px 4px 0; }                     /* rounded data-end, square at baseline */
+  .val { margin-left: 8px; font-size: 12px; color: var(--text-primary); white-space: nowrap; }
+  .val .muted { margin-left: 4px; }
+  .empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+
+  /* tooltip */
+  #tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+         border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.12); display: none; z-index: 10; max-width: 280px; }
+  #tip strong { font-size: 14px; display: block; }
+  #tip span { color: var(--text-secondary); }
+
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--text-secondary); }
+  table { border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 16px 4px 0; border-bottom: 1px solid var(--grid); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body class="viz-root">
+<main>
+  <h1>Feed mood</h1>
+  <p class="sub" id="summary">Loading…</p>
+
+  <div class="filters">
+    <div class="seg" id="range" role="group" aria-label="Time range">
+      <button data-days="1">Today</button>
+      <button data-days="7" aria-pressed="true">Last 7 days</button>
+      <button data-days="30">Last 30 days</button>
+      <button data-days="90">Last 90 days</button>
+    </div>
+    <div class="seg" id="scope" role="group" aria-label="Posts or replies">
+      <button data-scope="all" aria-pressed="true">Posts and replies</button>
+      <button data-scope="posts">Posts</button>
+      <button data-scope="replies">Replies</button>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+  <div class="grid" id="charts"></div>
+
+  <details>
+    <summary>Data table</summary>
+    <div id="table"></div>
+  </details>
+  <p class="muted">Percentages use your current “likely” and “possible” thresholds from Settings. Each post counts once, however often you see it. Statistics are kept for 90 days on this device.</p>
+</main>
+<div id="tip" role="tooltip"></div>
+<script src="settings.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

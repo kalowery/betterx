@@ -5,6 +5,7 @@
 <style>
   body { font: 13px -apple-system, system-ui, sans-serif; width: 400px; margin: 10px; }
   h1 { font-size: 14px; margin: 0 0 6px; }
+  h2 { font-size: 12px; font-weight: 600; color: #536471; margin: 10px 0 4px; }
   .row { display: flex; gap: 6px; margin: 8px 0; align-items: center; flex-wrap: wrap; }
   button { font: inherit; padding: 3px 8px; }
   ul { list-style: none; padding: 0; margin: 0; max-height: 360px; overflow: auto; }
@@ -21,10 +22,12 @@
   <div id="warn"></div>
   <div class="row">
     <label><input type="checkbox" id="enabled"> Classify posts</label>
+    <button id="mood">Feed mood…</button>
     <button id="settings">Settings…</button>
     <button id="export">Export JSON</button>
     <button id="clear">Clear captured</button>
   </div>
+  <h2 id="listHeading"></h2>
   <ul id="list"></ul>
   <script src="settings.js"></script>
   <script src="popup.js"></script>

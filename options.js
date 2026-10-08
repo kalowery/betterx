@@ -151,6 +151,7 @@ $("#testKey").onclick = () => {
 };
 $("#clearCache").onclick = () => chrome.runtime.sendMessage({ type: "clearCache" }, refreshCacheInfo);
 $("#clearCountries").onclick = () => chrome.runtime.sendMessage({ type: "clearCountries" }, refreshCacheInfo);
+$("#clearStats").onclick = () => chrome.runtime.sendMessage({ type: "clearStats" }, refreshCacheInfo);
 
 $("#cEnabled").onchange = (e) => {
   settings.country.enabled = e.target.checked;

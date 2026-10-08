@@ -4,7 +4,8 @@ importScripts("settings.js");
 
 const API = "https://api.typesafe.ai/v1/systemone";
 const MODEL = "jev-latest";
-const QUESTIONS_VERSION = 3; // bump when QUESTIONS change so cached answers are refreshed
+const QUESTIONS_VERSION = 4;
+const STATS_DAYS = 90; // bump when QUESTIONS change so cached answers are refreshed
 const MAX_CACHE = 5000;
 const MAX_CONCURRENT = 6;
 
@@ -106,6 +107,34 @@ const QUESTIONS = {
       false: "No antisemitic content (criticizing a government's policies is not by itself antisemitic)",
     },
   },
+  rage_bait: {
+    type: "noul",
+    instructions:
+      `${CONTEXT} Is this post rage bait: written mainly to provoke anger or outrage in readers, ` +
+      "for example to drive replies and shares? Judge the intended effect on readers, not the author's own tone; " +
+      "a calm post can be rage bait and an angry post may not be.",
+    criteria: {
+      true: {
+        means: "Designed to make readers angry",
+        includes: [
+          "inflammatory framing or exaggeration of an outrage",
+          "an incident presented selectively or without context to stoke us-versus-them anger",
+          "deliberately provocative claims or questions meant to bait angry replies",
+          "explicit invitations to be outraged",
+          "taunting or mocking a group to provoke a reaction",
+        ],
+      },
+      false: {
+        means: "Not mainly designed to provoke anger",
+        includes: [
+          "a sincere opinion or argument, even if strongly worded",
+          "straightforward news reporting",
+          "personal updates, questions, or humor without a target",
+          "the author venting their own anger without trying to inflame others",
+        ],
+      },
+    },
+  },
   sexually_explicit: {
     type: "noul",
     instructions: `${CONTEXT} Is the author's text sexually explicit?`,
@@ -178,11 +207,50 @@ async function classify(post) {
   const p = callJev(post).then((entry) => {
     c[post.id] = entry;
     scheduleSave();
+    recordStats(post, entry);
     return entry;
   });
   inflight.set(post.id, p);
   p.catch(() => {}).finally(() => inflight.delete(post.id));
   return p;
+}
+
+// --- feed-mood statistics ---
+// One compact record per classified post, in a bucket per day ("xpeStats:YYYY-MM-DD"), so
+// writes only touch today's bucket. The dashboard applies the user's thresholds when viewing.
+const r2 = (x) => (typeof x === "number" ? Math.round(x * 100) / 100 : null);
+let statsBucket = null; // { key, ready: Promise<data> }, shared so concurrent writers use one object
+let statsTimer = null;
+
+async function recordStats(post, entry) {
+  const a = entry.answers;
+  const key = "xpeStats:" + new Date().toISOString().slice(0, 10);
+  if (statsBucket?.key !== key) statsBucket = { key, ready: chrome.storage.local.get({ [key]: {} }).then((r) => r[key]) };
+  const data = await statsBucket.ready;
+  data[post.id] = {
+    at: entry.at,
+    k: post.kind,
+    h: post.handle?.toLowerCase(),
+    tone: a.tone?.choice,
+    type: a.post_type?.choice,
+    q: a.argument_quality ? Math.round(a.argument_quality.score * 10) / 10 : null,
+    p: {
+      racist: r2(a.racist?.noul),
+      group_contempt: r2(a.group_contempt?.noul),
+      antisemitic: r2(a.antisemitic?.noul),
+      sexually_explicit: r2(a.sexually_explicit?.noul),
+      rage_bait: r2(a.rage_bait?.noul),
+      insulting: r2(a.tone?.probabilities?.insulting),
+    },
+  };
+  clearTimeout(statsTimer);
+  statsTimer = setTimeout(async () => {
+    await chrome.storage.local.set({ [key]: data });
+    // Drop buckets older than STATS_DAYS.
+    const cutoff = "xpeStats:" + new Date(Date.now() - STATS_DAYS * 864e5).toISOString().slice(0, 10);
+    const old = Object.keys(await chrome.storage.local.get(null)).filter((k) => k.startsWith("xpeStats:") && k < cutoff);
+    if (old.length) await chrome.storage.local.remove(old);
+  }, 1500);
 }
 
 // --- X web-client config for the "About this account" lookup ---
@@ -241,6 +309,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, send) => {
   if (msg.type === "xconfig") return reply(xConfig(msg));
   if (msg.type === "countryTest") return reply(countryTest(msg.handle));
   if (msg.type === "clearCountries") return reply(chrome.storage.local.set({ xpeCountry: {} }));
+  if (msg.type === "clearStats") {
+    statsBucket = null;
+    return reply(
+      chrome.storage.local.get(null).then((all) => chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("xpeStats:")))),
+    );
+  }
   if (msg.type === "clearCache") {
     cache = {};
     return reply(chrome.storage.local.set({ xpeClass: {} }));
