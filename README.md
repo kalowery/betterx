@@ -1,5 +1,7 @@
 # betterx
 
+[![License: MIT](https://img.shields.io/github/license/kalowery/betterx)](LICENSE)
+
 A Chrome/Brave extension that reads posts and replies as you browse x.com, classifies each one with [TypeSafe](https://typesafe.ai)'s low-latency **Jev** classifier, and labels, dims, blurs, or hides it according to rules you choose. You can see what a post is before reading it.
 
 For each post Jev answers eight questions in one request (about 150–250 ms):
