@@ -1,11 +1,13 @@
-// Site-independent part of the content script. A site adapter (site-x.js or site-facebook.js,
-// loaded first) defines XPE_SITE with units(): the posts on the page, each as
+// Site-independent part of the content script. The rule engine (engine.js) finds the posts on
+// the page from the site's rule set, each as
 // { el: element to hide/blur/dim, host: element to put labels in, rec: extracted record }.
 // This file classifies records via the background worker and applies the user's rules.
+// Site capabilities that aren't page reading (X's account-location lookup) come from
+// XPE_SITE_CAPS, defined by site-x.js.
 // Sites render client-side and recycle DOM nodes while scrolling, so we watch for mutations
 // and key everything by post ID rather than by element.
 
-const SITE = globalThis.XPE_SITE;
+let SITE = null; // set at startup: { name, label, who(rec), units(), lookupCountry? }
 const MAX_STORED = 2000;
 const ERROR_RETRY_MS = 30000;
 
@@ -16,8 +18,8 @@ let units = []; // the latest scan's units, in page order
 let settings = XPE.DEFAULTS;
 let pendingSave = false;
 
-const siteOn = () => settings.sites?.[SITE.name] !== false;
-const countryOn = () => !!SITE.lookupCountry && settings.country.enabled;
+const siteOn = () => !!SITE && settings.sites?.[SITE.name] !== false;
+const countryOn = () => !!SITE?.lookupCountry && settings.country.enabled;
 
 // ---------- classification ----------
 
@@ -149,8 +151,10 @@ function pagePosts() {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, send) => {
-  if (msg.type === "pagePosts") return send({ ok: true, site: SITE.name, posts: pagePosts(), url: location.href });
-  if (msg.type === "countryTest" && SITE.lookupCountry) {
+  if (msg.type === "pagePosts") {
+    return send({ ok: true, site: SITE?.name, posts: SITE ? pagePosts() : [], rules: XPE_ENGINE.status(), url: location.href });
+  }
+  if (msg.type === "countryTest" && SITE?.lookupCountry) {
     SITE.lookupCountry(msg.handle.trim().replace(/^@/, "").toLowerCase()).then(
       (result) => send({ ok: true, result }),
       (e) => send({ ok: false, error: String(e.message || e) }),
@@ -321,6 +325,7 @@ function rerenderAll() {
 // ---------- main loop ----------
 
 function scan() {
+  if (!SITE) return;
   units = SITE.units();
   if (!siteOn()) {
     for (const u of units) clearDecorations(u.el, u.host);
@@ -363,25 +368,36 @@ function scheduleSave() {
 
 // ---------- startup (last, so everything above is defined) ----------
 
-XPE.load((s) => {
-  settings = s;
-  rerenderAll();
-});
-chrome.storage.onChanged.addListener((changes) => {
-  if (changes.xpeSettings) XPE.load((s) => ((settings = s), rerenderAll()));
-});
-if (SITE.lookupCountry) {
-  chrome.storage.local.get({ xpeCountry: {} }, ({ xpeCountry }) => {
-    for (const [h, v] of Object.entries(xpeCountry)) if (Date.now() - v.at < COUNTRY_TTL_MS) countries.set(h, v);
+(async () => {
+  const site = await XPE_ENGINE.init();
+  if (!site) return; // no rule set for this site
+  SITE = {
+    ...site,
+    who: (rec) => XPE_ENGINE.who(rec),
+    units: () => XPE_ENGINE.units(),
+    ...(globalThis.XPE_SITE_CAPS?.[site.name] || {}),
+  };
+
+  XPE.load((s) => {
+    settings = s;
     rerenderAll();
   });
-}
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.xpeSettings) XPE.load((s) => ((settings = s), rerenderAll()));
+  });
+  if (SITE.lookupCountry) {
+    chrome.storage.local.get({ xpeCountry: {} }, ({ xpeCountry }) => {
+      for (const [h, v] of Object.entries(xpeCountry)) if (Date.now() - v.at < COUNTRY_TTL_MS) countries.set(h, v);
+      rerenderAll();
+    });
+  }
 
-// Debounced rescan on DOM changes; both sites are single-page apps, so this also covers navigation.
-let timer = null;
-new MutationObserver(() => {
-  clearTimeout(timer);
-  timer = setTimeout(scan, 250);
-}).observe(document.body, { childList: true, subtree: true });
+  // Debounced rescan on DOM changes; both sites are single-page apps, so this also covers navigation.
+  let timer = null;
+  new MutationObserver(() => {
+    clearTimeout(timer);
+    timer = setTimeout(scan, 250);
+  }).observe(document.body, { childList: true, subtree: true });
 
-scan();
+  scan();
+})();

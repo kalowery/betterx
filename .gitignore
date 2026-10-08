@@ -1,6 +1,7 @@
 # Exported posts and classifications (other people's content; never publish)
 *.json
 !manifest.json
+!rules/*.json
 
 # Secrets
 .env

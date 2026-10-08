@@ -1,6 +1,6 @@
 // Calls TypeSafe's Jev classifier for posts found by the content script.
 // Runs here (not in the page) so the API key stays out of x.com and CORS doesn't apply.
-importScripts("settings.js");
+importScripts("settings.js", "rules.js");
 
 const API = "https://api.typesafe.ai/v1/systemone";
 const MODEL = "jev-latest";
@@ -257,6 +257,107 @@ async function recordStats(post, entry) {
   }, 1500);
 }
 
+// --- page rules: bundled defaults, installed rule sets, last known good, health ---
+// Sources, newest version wins: the rule set bundled with the extension, one installed by the
+// user (later: downloaded from a rules server), and the last known good copy. A version that
+// keeps reporting broken/degraded is marked suspect and skipped while another is available.
+// A version that reports healthy repeatedly becomes the last known good.
+const PROMOTE_AFTER = 3; // healthy reports
+const SUSPECT_AFTER = 3; // consecutive broken/degraded reports
+const bundledRules = {};
+
+async function bundled(site) {
+  if (!bundledRules[site]) bundledRules[site] = await (await fetch(chrome.runtime.getURL(`rules/${site}.json`))).json();
+  return bundledRules[site];
+}
+
+async function rulesStore(site) {
+  const keys = { [`xpeRulesInstalled:${site}`]: null, [`xpeRulesLKG:${site}`]: null, [`xpeRulesHealth:${site}`]: { versions: {} } };
+  const st = await chrome.storage.local.get(keys);
+  return {
+    installed: st[`xpeRulesInstalled:${site}`],
+    lkg: st[`xpeRulesLKG:${site}`],
+    health: st[`xpeRulesHealth:${site}`],
+  };
+}
+
+async function getRules(site) {
+  if (!XPE_RULES.SITES[site]) throw new Error(`unknown site ${site}`);
+  const { installed, lkg, health } = await rulesStore(site);
+  const b = await bundled(site);
+  const byVersion = new Map();
+  for (const rs of [installed, b, lkg]) {
+    if (rs && !XPE_RULES.validate(rs).length && !byVersion.has(rs.version)) byVersion.set(rs.version, rs);
+  }
+  const candidates = [...byVersion.values()].sort((x, y) => XPE_RULES.compareVersions(y.version, x.version));
+  const active = candidates.find((rs) => !health.versions[rs.version]?.suspect) || candidates[0];
+  const fallback = lkg && lkg.version !== active.version && !XPE_RULES.validate(lkg).length ? lkg : null;
+  const source = active === installed ? "installed" : active === b ? "bundled" : "last known good";
+  return { active, fallback, source };
+}
+
+async function rulesHealth(msg) {
+  const key = `xpeRulesHealth:${msg.site}`;
+  const { [key]: h } = await chrome.storage.local.get({ [key]: { versions: {} } });
+  const v = (h.versions[msg.version] ||= { healthy: 0, degraded: 0, broken: 0, badStreak: 0, suspect: false });
+  v[msg.status] = (v[msg.status] || 0) + 1;
+  v.badStreak = msg.status === "healthy" ? 0 : v.badStreak + 1;
+  Object.assign(v, { lastStatus: msg.status, lastReasons: msg.reasons, lastUnits: msg.units, lastRates: msg.rates, lastAt: Date.now() });
+  h.last = { version: msg.version, status: msg.status, reasons: msg.reasons, usingFallback: msg.usingFallback, at: Date.now() };
+
+  const { installed, lkg } = await rulesStore(msg.site);
+  const b = await bundled(msg.site);
+  const rs = [installed, b, lkg].find((x) => x?.version === msg.version);
+  if (msg.status === "healthy" && v.healthy >= PROMOTE_AFTER && rs && lkg?.version !== rs.version) {
+    await chrome.storage.local.set({ [`xpeRulesLKG:${msg.site}`]: rs });
+  }
+  // Only mark a version suspect if there is something else to use.
+  if (v.badStreak >= SUSPECT_AFTER && lkg && lkg.version !== msg.version) v.suspect = true;
+  if (msg.status === "healthy") v.suspect = false;
+  await chrome.storage.local.set({ [key]: h });
+}
+
+async function rulesStatus() {
+  const out = {};
+  for (const site of Object.keys(XPE_RULES.SITES)) {
+    const { installed, lkg, health } = await rulesStore(site);
+    const { active, fallback, source } = await getRules(site);
+    out[site] = {
+      bundled: (await bundled(site)).version,
+      installed: installed?.version || null,
+      lastKnownGood: lkg?.version || null,
+      active: active.version,
+      activeSource: source,
+      fallback: fallback?.version || null,
+      versions: health.versions,
+      last: health.last || null,
+    };
+  }
+  return out;
+}
+
+async function rulesInstall(rs) {
+  const problems = XPE_RULES.validate(rs);
+  if (problems.length) throw new Error("Invalid rules: " + problems.join("; "));
+  const key = `xpeRulesHealth:${rs.site}`;
+  const { [key]: h } = await chrome.storage.local.get({ [key]: { versions: {} } });
+  delete h.versions[rs.version]; // a reinstalled version starts with a clean record
+  await chrome.storage.local.set({ [`xpeRulesInstalled:${rs.site}`]: rs, [key]: h });
+  return { site: rs.site, version: rs.version };
+}
+
+// "Use built-in rules": drop the installed set, and its copy as last known good if it is one.
+async function rulesRemove(site) {
+  const { installed, lkg } = await rulesStore(site);
+  const keys = [`xpeRulesInstalled:${site}`];
+  if (installed && lkg?.version === installed.version) keys.push(`xpeRulesLKG:${site}`);
+  await chrome.storage.local.remove(keys);
+}
+
+async function rulesResetHealth(site) {
+  await chrome.storage.local.remove([`xpeRulesHealth:${site}`, `xpeRulesLKG:${site}`]);
+}
+
 // --- X web-client config for the "About this account" lookup ---
 // The web app's bearer token is public (embedded in X's main script for every visitor) and the
 // persisted query ID changes with deploys, so both are read from X's own scripts at runtime.
@@ -310,6 +411,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, send) => {
   if (msg.type === "test") {
     return reply(callJev({ id: "test", handle: "test", text: msg.text || "Thanks everyone for the kind words today!" }));
   }
+  if (msg.type === "getRules") return reply(getRules(msg.site));
+  if (msg.type === "rulesHealth") return reply(rulesHealth(msg));
+  if (msg.type === "rulesStatus") return reply(rulesStatus());
+  if (msg.type === "rulesInstall") return reply(rulesInstall(msg.rules));
+  if (msg.type === "rulesRemove") return reply(rulesRemove(msg.site));
+  if (msg.type === "rulesResetHealth") return reply(rulesResetHealth(msg.site));
   if (msg.type === "xconfig") return reply(xConfig(msg));
   if (msg.type === "countryTest") return reply(countryTest(msg.handle));
   if (msg.type === "clearCountries") return reply(chrome.storage.local.set({ xpeCountry: {} }));

@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "site": "x",
+  "label": "X",
+  "version": "2026.10.08.1",
+  "display": {
+    "who": "@{handle}"
+  },
+  "page": {
+    "focalId": {
+      "pathPattern": "/status/(\\d+)"
+    }
+  },
+  "health": {
+    "contentSignal": {
+      "selector": "div[dir='auto'], span[dir='auto']",
+      "min": 40
+    },
+    "requireTypes": [
+      "post"
+    ],
+    "minUnitsForRates": 3,
+    "fields": {
+      "text": 0.6,
+      "handle": 0.95,
+      "displayName": 0.8,
+      "host": 0.9
+    }
+  },
+  "units": [
+    {
+      "type": "post",
+      "find": {
+        "selector": "article[data-testid='tweet']"
+      },
+      "require": [
+        "id"
+      ],
+      "fields": {
+        "id": {
+          "select": "a[href*='/status/']:has(time)",
+          "attr": "href",
+          "pattern": "^/([^/]+)/status/(\\d+)",
+          "group": 2
+        },
+        "handle": {
+          "select": "a[href*='/status/']:has(time)",
+          "attr": "href",
+          "pattern": "^/([^/]+)/status/(\\d+)",
+          "group": 1
+        },
+        "url": {
+          "template": "https://x.com/{handle}/status/{id}"
+        },
+        "displayName": {
+          "select": "[data-testid='User-Name'] span",
+          "attr": "text"
+        },
+        "time": {
+          "select": "a[href*='/status/'] time",
+          "attr": "datetime"
+        },
+        "text": {
+          "select": "[data-testid='tweetText']",
+          "notInside": "[role='link']",
+          "text": {}
+        },
+        "truncated": {
+          "exists": "[data-testid='tweet-text-show-more-link']"
+        },
+        "quotedText": {
+          "select": "[data-testid='tweetText']",
+          "inside": "[role='link']",
+          "text": {}
+        },
+        "socialContext": {
+          "select": "[data-testid='socialContext']",
+          "attr": "text"
+        },
+        "kind": {
+          "late": true,
+          "cases": [
+            {
+              "if": {
+                "fieldEquals": [
+                  "id",
+                  "$page.focalId"
+                ]
+              },
+              "then": "focal"
+            },
+            {
+              "if": {
+                "relative": "after",
+                "to": {
+                  "fieldEquals": [
+                    "id",
+                    "$page.focalId"
+                  ]
+                }
+              },
+              "then": "reply"
+            },
+            {
+              "if": {
+                "relative": "before",
+                "to": {
+                  "fieldEquals": [
+                    "id",
+                    "$page.focalId"
+                  ]
+                }
+              },
+              "then": "parent"
+            },
+            {
+              "if": {
+                "exists": "div",
+                "textPattern": "^Replying to\\b",
+                "maxChildren": 3,
+                "notInside": "[role='link']"
+              },
+              "then": "reply"
+            },
+            {
+              "else": "post"
+            }
+          ]
+        }
+      },
+      "host": {
+        "select": "[data-testid='User-Name']"
+      }
+    }
+  ]
+}

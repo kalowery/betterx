@@ -201,6 +201,75 @@ $("#resetSettings").onclick = () => {
   render();
 };
 
+// ---------- page rules ----------
+
+function refreshRules() {
+  chrome.runtime.sendMessage({ type: "rulesStatus" }, (res) => {
+    if (!res?.ok) return ($("#rulesStatus").textContent = "Couldn't load rule status: " + (res?.error || chrome.runtime.lastError?.message));
+    const t = document.createElement("table");
+    t.className = "rules";
+    const head = document.createElement("tr");
+    ["Site", "In use", "Fallback", "Built-in", "Installed", "Last health check", ""].forEach((h) => {
+      const th = document.createElement("th");
+      th.textContent = h;
+      head.append(th);
+    });
+    t.append(head);
+    for (const [site, s] of Object.entries(res.result)) {
+      const tr = document.createElement("tr");
+      const td = (text, cls) => {
+        const c = document.createElement("td");
+        c.textContent = text;
+        if (cls) c.className = cls;
+        tr.append(c);
+        return c;
+      };
+      td(site === "x" ? "X" : "Facebook");
+      td(`${s.active} (${s.activeSource})`);
+      td(s.fallback || s.lastKnownGood ? `${s.fallback || "—"}${s.lastKnownGood ? ` · last known good ${s.lastKnownGood}` : ""}` : "none yet");
+      td(s.bundled);
+      td(s.installed || "—");
+      const last = s.last;
+      td(
+        last ? `${last.status} · ${last.version} · ${new Date(last.at).toLocaleString()}${last.reasons?.length ? " — " + last.reasons.join("; ") : ""}` : "no reports yet",
+        !last ? "" : last.status === "healthy" ? "ok" : last.status === "broken" ? "bad" : "meh",
+      );
+      const actions = td("");
+      if (s.installed) {
+        const b = document.createElement("button");
+        b.textContent = "Use built-in rules";
+        b.onclick = () => chrome.runtime.sendMessage({ type: "rulesRemove", site }, refreshRules);
+        actions.append(b);
+      }
+      const r = document.createElement("button");
+      r.textContent = "Reset health";
+      r.title = "Forget health reports and the last-known-good copy for this site";
+      r.onclick = () => chrome.runtime.sendMessage({ type: "rulesResetHealth", site }, refreshRules);
+      actions.append(r);
+      t.append(tr);
+    }
+    $("#rulesStatus").replaceChildren(t);
+  });
+}
+
+$("#rulesInstall").onclick = () => {
+  let rules;
+  try {
+    rules = JSON.parse($("#rulesInput").value);
+  } catch (e) {
+    return ($("#rulesInstallResult").textContent = "Not valid JSON: " + e.message);
+  }
+  const problems = XPE_RULES.validate(rules);
+  if (problems.length) return ($("#rulesInstallResult").textContent = "Invalid rules: " + problems.join("; "));
+  chrome.runtime.sendMessage({ type: "rulesInstall", rules }, (res) => {
+    $("#rulesInstallResult").textContent = res?.ok
+      ? `Installed ${res.result.site} rules ${res.result.version}. Reload open tabs to use them.`
+      : "Failed: " + (res?.error || chrome.runtime.lastError?.message);
+    refreshRules();
+  });
+};
+refreshRules();
+
 chrome.storage.local.get("xpeApiKey", ({ xpeApiKey }) => ($("#apiKey").value = xpeApiKey || ""));
 XPE.load((s) => {
   settings = s;

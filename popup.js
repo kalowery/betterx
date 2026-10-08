@@ -20,6 +20,14 @@ function render() {
       chrome.tabs.sendMessage(tab.id, { type: "pagePosts" }, (res) => {
         if (chrome.runtime.lastError || !res?.ok) return fallback("reload this tab to see its posts here");
         renderList(`On this page (${res.posts.length})`, res.posts);
+        // Tell the user when the page rules aren't working here.
+        const r = res.rules;
+        if (r && (r.status === "broken" || r.status === "degraded" || r.usingFallback)) {
+          const note = r.usingFallback
+            ? `Using fallback page rules ${r.version} — the newer rules didn't work on this page.`
+            : `betterx may be missing posts here (rules ${r.version}: ${(r.reasons || []).join("; ")}). The site may have changed its layout.`;
+          document.getElementById("warn").textContent = note;
+        }
       });
     });
   });

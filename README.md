@@ -68,6 +68,10 @@ On facebook.com, betterx classifies feed posts and the comments and replies you 
 
 Facebook's page markup uses generated class names that change often, so betterx relies on the few stable markers in it: `data-ad-rendering-role="story_message"` and `"profile_name"` for a post's text and author, the post's `aria-labelledby` container, and `role="article"` elements with a `comment_id` link for comments. Photo- or video-only posts, and sticker-only comments, have no text and are skipped. Sponsored posts can't be told apart reliably (Facebook scrambles that label) and are classified like any other post. The account location filter is X-only: Facebook has no equivalent for personal profiles.
 
+## When a site changes its layout
+
+betterx checks its page rules on every page. If they stop finding posts on a page that clearly has content, or stop finding authors or text for most posts, the popup says so and betterx switches to the last rule set that worked, if there is one. Health reports stay on your device and contain no post content. **Settings → Page rules** shows each site's rule versions and latest health check, and can install an updated rule file.
+
 ## Account location filter (X only; optional, off by default)
 
 X's "About this account" page shows where an account is based. With this option on, betterx looks that up for each account it sees and shows it as a 📍 label (with "?" when X says the location may be inaccurate, e.g. because of a VPN). You can then filter posts or replies from accounts based in countries you list, using the same actions as the content rules. The settings page lists the countries seen so far, so you can click to add them, and has a test box for checking a single handle.
@@ -90,13 +94,15 @@ To update, `git pull` and click the reload arrow on the extension's card in `chr
 
 ```
 x.com / facebook.com page                extension background worker          TypeSafe
-site-x.js or site-facebook.js
-  finds posts and comments
+engine.js + rules/<site>.json            page rules: built-in / installed /
+  finds posts and comments,  ◄────────── last known good, health records
+  checks its own health ───────────────►
 core.js ── post text ───────────────────► background.js ── POST /v1/systemone ─► Jev
   applies your rules ◄── answers ────────   cache + 6 concurrent requests
 ```
 
-- **`site-x.js`** and **`site-facebook.js`** are site adapters: each finds the posts (and, on Facebook, comments) in the live page and turns them into records with an ID, author, text, quoted or parent text, and whether it's a reply. `site-x.js` also does the X account-location lookup.
+- **`rules/x.json`** and **`rules/facebook.json`** describe how to find posts and comments on each site — selectors, fallbacks, ID patterns — as data. **`engine.js`** interprets them; see [docs/rules.md](docs/rules.md) for the format. Because layout knowledge is data, a site redesign can be fixed by updating a rule file rather than the extension's code.
+- **`site-x.js`** holds X capabilities that aren't page reading (the account-location lookup).
 - **`core.js`** is shared by both sites: it sends records for classification, applies your rules, and draws labels, markers, blur, and dim. Both sites reuse page elements while you scroll, so everything is keyed by post ID and re-applied as the page changes.
 - **`background.js`** calls Jev. The API key lives only here, in the extension's local storage, and is never exposed to X or Facebook. Each post is classified once and cached (most recent 5,000); a post first seen cut off by "Show more" is reclassified when its full text appears.
 - **`settings.js`** holds the defaults and the rule logic shared by every part of the extension.
@@ -111,7 +117,7 @@ core.js ── post text ──────────────────�
 
 ## Limitations
 
-- It depends on each site's page structure (`data-testid` attributes on X; the markers above on Facebook). If a site changes it, extraction may break; Facebook changes more often.
+- It depends on each site's page structure (`data-testid` attributes on X; the markers above on Facebook). If a site changes it, extraction may break until the rule file is updated; Facebook changes more often.
 - Posts cut off by "Show more" / "See more" are classified on the visible text until you open them.
 - Feed replies are detected from the "Replying to" line; on thread pages, everything below the main post counts as a reply.
 - Classifications are probabilistic. Thresholds trade missed posts against false alarms, and the antisemitism question has been the least consistent in testing.

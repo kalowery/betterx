@@ -21,6 +21,9 @@
   .result { font-size: 12px; color: #536471; margin-left: 8px; }
   .seen { display: inline-block; margin: 2px 4px 2px 0; padding: 0 8px; border-radius: 9999px; background: #eff3f4; cursor: pointer; font-size: 12px; color: #0f1419; }
   .seen:hover { background: #e1e8ed; }
+  .rules td, .rules th { font-size: 13px; vertical-align: top; }
+  .ok { color: #00a06a; } .bad { color: #f4212e; } .meh { color: #c47800; }
+  textarea { font: 12px ui-monospace, Menlo, monospace; }
 </style>
 </head>
 <body>
@@ -83,6 +86,16 @@
     <span id="cTestResult" class="result"></span>
   </p>
 
+  <h2>Page rules</h2>
+  <p class="sub">How betterx finds posts and comments on each site is defined by a rule file, not code, so it can be updated when a site changes its layout. betterx checks its rules on every page; if they stop finding posts, it switches to the last rules that worked.</p>
+  <div id="rulesStatus">Loading…</div>
+  <details>
+    <summary>Install a rule file</summary>
+    <p class="sub">Paste a rule file (JSON). It replaces the built-in rules for its site if its version is newer; the previous rules stay available as a fallback once they've proven healthy.</p>
+    <textarea id="rulesInput" rows="8" cols="80" placeholder='{"schema": 1, "site": "facebook", "version": "…", …}'></textarea><br>
+    <button id="rulesInstall">Install</button> <span id="rulesInstallResult" class="result"></span>
+  </details>
+
   <h2>Data</h2>
   <p>
     <span id="cacheInfo"></span>
@@ -93,6 +106,7 @@
   </p>
 
   <script src="settings.js"></script>
+  <script src="rules.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

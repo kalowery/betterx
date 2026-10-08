@@ -1,0 +1,282 @@
+{
+  "schema": 1,
+  "site": "facebook",
+  "label": "Facebook",
+  "version": "2026.10.08.1",
+  "display": {
+    "who": "{displayName|handle}"
+  },
+  "health": {
+    "contentSignal": {
+      "selector": "div[dir='auto'], span[dir='auto']",
+      "min": 40
+    },
+    "requireTypes": [
+      "post"
+    ],
+    "minUnitsForRates": 3,
+    "fields": {
+      "text": 0.9,
+      "handle": 0.9,
+      "displayName": 0.9,
+      "host": 0.9
+    }
+  },
+  "units": [
+    {
+      "type": "post",
+      "find": {
+        "anchor": "[data-ad-rendering-role='story_message']",
+        "anchorNotInside": "[role='article']:has(a[href*='comment_id='])",
+        "root": {
+          "closest": "div[aria-labelledby]"
+        }
+      },
+      "require": [
+        "text",
+        "displayName"
+      ],
+      "fields": {
+        "handle": {
+          "first": [
+            {
+              "select": "[data-ad-rendering-role='profile_name'] a[href]",
+              "notInside": "[role='article']:has(a[href*='comment_id='])",
+              "attr": "href",
+              "handleFromUrl": {
+                "idPath": "/profile.php",
+                "idParam": "id",
+                "idPrefix": "id:",
+                "multiSegment": [
+                  "groups",
+                  "people",
+                  "pages"
+                ]
+              }
+            }
+          ],
+          "default": "unknown"
+        },
+        "displayName": {
+          "first": [
+            {
+              "select": "[data-ad-rendering-role='profile_name'] a[href]",
+              "notInside": "[role='article']:has(a[href*='comment_id='])",
+              "attr": "text"
+            },
+            {
+              "select": "[data-ad-rendering-role='profile_name']",
+              "notInside": "[role='article']:has(a[href*='comment_id='])",
+              "attr": "text"
+            }
+          ]
+        },
+        "text": {
+          "select": "[data-ad-rendering-role='story_message']",
+          "notInside": "[role='article']:has(a[href*='comment_id='])",
+          "text": {
+            "skip": [
+              "[role='button']"
+            ],
+            "blockNewlines": true
+          }
+        },
+        "id": {
+          "first": [
+            {
+              "select": "a[href]",
+              "notInside": "[role='article']:has(a[href*='comment_id='])",
+              "attr": "href",
+              "patterns": [
+                "/posts/(pfbid\\w+|\\d+)",
+                "[?&]story_fbid=(pfbid\\w+|\\d+)",
+                "/permalink/(\\d+)",
+                "/videos/pcb\\.(\\d+)",
+                "/photos/[^/]+/pcb\\.(\\d+)",
+                "/reel/(\\d+)"
+              ]
+            },
+            {
+              "hash": "{handle}|{text:200}",
+              "prefix": "h"
+            }
+          ],
+          "prefix": "fb:"
+        },
+        "url": {
+          "select": "a[href]",
+          "notInside": "[role='article']:has(a[href*='comment_id='])",
+          "attr": "href",
+          "patterns": [
+            "/posts/(pfbid\\w+|\\d+)",
+            "[?&]story_fbid=(pfbid\\w+|\\d+)",
+            "/permalink/(\\d+)",
+            "/videos/pcb\\.(\\d+)",
+            "/photos/[^/]+/pcb\\.(\\d+)",
+            "/reel/(\\d+)"
+          ],
+          "keep": "value",
+          "stripQuery": true,
+          "absolute": true
+        },
+        "truncated": {
+          "exists": "[data-ad-rendering-role='story_message'] [role='button']",
+          "textPattern": "^see more$",
+          "notInside": "[role='article']:has(a[href*='comment_id='])"
+        },
+        "quotedText": {
+          "select": "[data-ad-rendering-role='story_message']",
+          "nth": 1,
+          "notInside": "[role='article']:has(a[href*='comment_id='])",
+          "text": {
+            "skip": [
+              "[role='button']"
+            ],
+            "blockNewlines": true
+          }
+        },
+        "kind": {
+          "cases": [
+            {
+              "if": {
+                "closest": "[role='dialog']"
+              },
+              "then": "focal"
+            },
+            {
+              "else": "post"
+            }
+          ]
+        }
+      },
+      "host": {
+        "first": [
+          {
+            "select": "[data-ad-rendering-role='profile_name'] a[href]",
+            "notInside": "[role='article']:has(a[href*='comment_id='])",
+            "parent": true
+          },
+          {
+            "select": "[data-ad-rendering-role='profile_name']",
+            "notInside": "[role='article']:has(a[href*='comment_id='])"
+          }
+        ]
+      }
+    },
+    {
+      "type": "comment",
+      "find": {
+        "selector": "[role='article']:has(a[href*='comment_id='])"
+      },
+      "require": [
+        "id",
+        "text"
+      ],
+      "fields": {
+        "id": {
+          "select": "a[href*='comment_id=']",
+          "attr": "href",
+          "param": [
+            "reply_comment_id",
+            "comment_id"
+          ],
+          "prefix": "fbc:"
+        },
+        "handle": {
+          "first": [
+            {
+              "select": "a[role='link']:not([aria-hidden='true'])",
+              "nonEmpty": true,
+              "attr": "href",
+              "handleFromUrl": {
+                "idPath": "/profile.php",
+                "idParam": "id",
+                "idPrefix": "id:",
+                "multiSegment": [
+                  "groups",
+                  "people",
+                  "pages"
+                ]
+              }
+            }
+          ],
+          "default": "unknown"
+        },
+        "displayName": {
+          "select": "a[role='link']:not([aria-hidden='true'])",
+          "nonEmpty": true,
+          "attr": "text"
+        },
+        "url": {
+          "select": "a[href*='comment_id=']",
+          "attr": "href",
+          "absolute": true
+        },
+        "text": {
+          "first": [
+            {
+              "all": "span[lang] div[dir='auto']",
+              "join": "\n",
+              "text": {
+                "skip": [
+                  "[role='button']"
+                ],
+                "blockNewlines": true
+              }
+            },
+            {
+              "all": "div[dir='auto']",
+              "notInside": "a",
+              "join": "\n",
+              "text": {
+                "skip": [
+                  "[role='button']"
+                ],
+                "blockNewlines": true
+              }
+            }
+          ]
+        },
+        "truncated": {
+          "exists": "[role='button']",
+          "textPattern": "^see more$"
+        },
+        "parentText": {
+          "scope": {
+            "closest": "div[aria-labelledby]"
+          },
+          "select": "[data-ad-rendering-role='story_message']",
+          "notInside": "[role='article']:has(a[href*='comment_id='])",
+          "text": {
+            "skip": [
+              "[role='button']"
+            ],
+            "blockNewlines": true
+          },
+          "maxLength": 2000
+        },
+        "kind": {
+          "const": "reply"
+        },
+        "subkind": {
+          "cases": [
+            {
+              "if": {
+                "exists": "a[href*='reply_comment_id=']"
+              },
+              "then": "reply"
+            },
+            {
+              "else": "comment"
+            }
+          ]
+        }
+      },
+      "host": {
+        "select": "a[role='link']:not([aria-hidden='true'])",
+        "nonEmpty": true,
+        "parent": true
+      }
+    }
+  ]
+}

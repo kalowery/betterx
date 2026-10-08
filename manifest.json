@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "betterx",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Classifies posts and comments on X and Facebook with TypeSafe\u2019s Jev, and labels, dims, blurs, or hides them by your rules.",
   "permissions": [
     "storage"
@@ -24,6 +24,8 @@
       ],
       "js": [
         "settings.js",
+        "rules.js",
+        "engine.js",
         "site-x.js",
         "core.js"
       ],
@@ -38,7 +40,8 @@
       ],
       "js": [
         "settings.js",
-        "site-facebook.js",
+        "rules.js",
+        "engine.js",
         "core.js"
       ],
       "css": [
