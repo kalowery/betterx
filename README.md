@@ -32,6 +32,7 @@ Open the toolbar popup → **Settings…** (or right-click the extension icon �
 - **Content rules.** For each category (racist, contempt for a nationality or immigrants, antisemitic, sexually explicit, insulting tone) choose a *likely* threshold and a *possible* threshold, and what to do at each: nothing, label, dim, blur, or hide. When several rules match, the strongest action wins (hide > blur > dim > label).
 - **Weak arguments.** Optionally dim, blur, or hide posts with argument quality at or below a score you pick.
 - **Labels.** Show or hide the tone, post type, and argument quality labels.
+- **Account location.** Optionally look up where each account is based (from X's "About this account") and label, dim, blur, or hide posts — or only replies — from countries you list. See below.
 - **API key, on/off switch, Test button, and data reset.**
 
 Defaults:
@@ -43,6 +44,14 @@ Defaults:
 | Antisemitic | Hide | Label |
 | Sexually explicit | Blur | Label |
 | Insulting tone | Label | Nothing |
+
+## Account location filter (optional, off by default)
+
+X's "About this account" page shows where an account is based. With this option on, betterx looks that up for each account it sees and shows it as a 📍 label (with "?" when X says the location may be inaccurate, e.g. because of a VPN). You can then filter posts or replies from accounts based in countries you list, using the same actions as the content rules. The settings page lists the countries seen so far, so you can click to add them, and has a test box for checking a single handle.
+
+How it works: the lookup calls the same `AboutAccountQuery` GraphQL request the X web app uses, from the x.com tab with your logged-in session. The web app's public access token and the current query ID are read from X's own scripts at runtime. Each account is looked up once and saved for 30 days; lookups run one at a time, 1.5 s apart, pause when X reports a rate limit, and back off after repeated errors.
+
+**Caveats:** this is an undocumented, unofficial interface. It adds requests to your account beyond normal browsing, so X could rate-limit or flag it, and it can stop working whenever X changes the API. Use it at your own risk.
 
 ## Install
 
@@ -71,6 +80,7 @@ content.js ── post text ─────────► background.js ── 
 ## Privacy
 
 - Post text is sent to TypeSafe's API for classification. Nothing is sent anywhere else.
+- If the account location filter is on, account handles are looked up on x.com itself, under your logged-in session.
 - Captured posts and classifications stay in the browser's local extension storage until you clear them.
 - Your API key is stored only in local extension storage on your machine.
 

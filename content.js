@@ -19,6 +19,17 @@ const revealed = new Set(); // ids the user chose to show despite a hide/blur ru
 let settings = XPE.DEFAULTS;
 let pendingSave = false;
 
+// Account locations from X's "About this account" (handle, lowercased -> info).
+// info: { state: "pending" | "done" | "none" | "error", name?, accurate?, at?, error? }
+const COUNTRY_TTL_MS = 30 * 24 * 3600 * 1000;
+const LOOKUP_GAP_MS = 1500;
+const MAX_LOOKUP_QUEUE = 200;
+const countries = new Map();
+chrome.storage.local.get({ xpeCountry: {} }, ({ xpeCountry }) => {
+  for (const [h, v] of Object.entries(xpeCountry)) if (Date.now() - v.at < COUNTRY_TTL_MS) countries.set(h, v);
+  rerenderAll();
+});
+
 XPE.load((s) => {
   settings = s;
   rerenderAll();
@@ -123,6 +134,150 @@ function requestClassification(rec) {
   });
 }
 
+// ---------- account location ("About this account") ----------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The bearer token and query ID come from X's own scripts (via the background worker).
+let xConfigPromise = null;
+function xConfig() {
+  if (xConfigPromise) return xConfigPromise;
+  const scripts = [...document.scripts];
+  const mainUrl = scripts.map((s) => s.src).find((s) => /\/client-web\/main\.[0-9a-f]+\.js/.test(s));
+  const runtime = scripts.map((s) => s.textContent).find((t) => t.includes("loader.AboutAccount")) || "";
+  let chunkUrl = null;
+  const m = runtime.match(/(\d+):"(shared~bundle\.UserAbout~loader\.AboutAccount)"/);
+  const hash = m && runtime.match(new RegExp(`[,{]${m[1]}:"([0-9a-f]{16})"`))?.[1];
+  if (hash) chunkUrl = `https://abs.twimg.com/responsive-web/client-web/${m[2]}.${hash}a.js`;
+  xConfigPromise = new Promise((resolve, reject) =>
+    chrome.runtime.sendMessage({ type: "xconfig", mainUrl, chunkUrl }, (res) => {
+      if (res?.ok) return resolve(res.result);
+      xConfigPromise = null;
+      reject(new Error(res?.error || chrome.runtime.lastError?.message || "Couldn't read X's configuration"));
+    }),
+  );
+  return xConfigPromise;
+}
+
+class RateLimited extends Error {}
+
+async function lookupCountry(handle) {
+  const cfg = await xConfig();
+  const ct0 = document.cookie.match(/(?:^|;\s*)ct0=([^;]+)/)?.[1];
+  if (!ct0) throw new Error("Not logged in to x.com");
+  const vars = encodeURIComponent(JSON.stringify({ screenName: handle }));
+  const res = await fetch(`/i/api/graphql/${cfg.queryId}/AboutAccountQuery?variables=${vars}`, {
+    credentials: "include",
+    headers: {
+      authorization: `Bearer ${cfg.bearer}`,
+      "x-csrf-token": ct0,
+      "x-twitter-auth-type": "OAuth2Session",
+      "x-twitter-active-user": "yes",
+      "x-twitter-client-language": document.documentElement.lang || "en",
+      "content-type": "application/json",
+    },
+  });
+  if (res.status === 429) {
+    const reset = Number(res.headers.get("x-rate-limit-reset"));
+    throw new RateLimited(`Rate limited by X until ${new Date(reset ? reset * 1000 : Date.now() + 15 * 60e3).toLocaleTimeString()}`, {
+      cause: reset ? reset * 1000 : Date.now() + 15 * 60e3,
+    });
+  }
+  if (!res.ok) throw new Error(`X returned HTTP ${res.status} for the account lookup`);
+  const about = (await res.json())?.data?.user_result_by_screen_name?.result?.about_profile;
+  if (!about?.account_based_in) return { state: "none", at: Date.now() };
+  return { state: "done", name: about.account_based_in, accurate: about.location_accurate !== false, at: Date.now() };
+}
+
+const lookupQueue = [];
+let lookupRunning = false;
+let pausedUntil = 0;
+let consecutiveErrors = 0;
+
+function requestCountry(handle) {
+  if (!settings.country.enabled) return;
+  const h = handle.toLowerCase();
+  const cur = countries.get(h);
+  if (cur && (cur.state !== "error" || Date.now() - cur.at < 4 * ERROR_RETRY_MS)) return;
+  countries.set(h, { state: "pending" });
+  lookupQueue.push(h);
+  if (lookupQueue.length > MAX_LOOKUP_QUEUE) countries.delete(lookupQueue.shift()); // re-requested if seen again
+  pumpLookups();
+}
+
+// Accounts whose posts are on screen go first; otherwise the most recently seen.
+function nextLookup() {
+  const visible = new Set();
+  for (const a of document.querySelectorAll(SEL.post)) {
+    const r = a.getBoundingClientRect();
+    if (r.bottom > 0 && r.top < innerHeight) {
+      const h = seen.get(permalink(a)?.id)?.handle.toLowerCase();
+      if (h) visible.add(h);
+    }
+  }
+  for (let i = lookupQueue.length - 1; i >= 0; i--) {
+    if (visible.has(lookupQueue[i])) return lookupQueue.splice(i, 1)[0];
+  }
+  return lookupQueue.pop();
+}
+
+// One lookup at a time, spaced out; waits out rate limits and backs off on errors.
+async function pumpLookups() {
+  if (lookupRunning) return;
+  lookupRunning = true;
+  try {
+    while (lookupQueue.length && settings.country.enabled) {
+      if (pausedUntil > Date.now()) await sleep(pausedUntil - Date.now());
+      const h = nextLookup();
+      let info;
+      try {
+        info = await lookupCountry(h);
+        consecutiveErrors = 0;
+      } catch (e) {
+        if (e instanceof RateLimited) {
+          pausedUntil = e.cause;
+          lookupQueue.push(h);
+          continue;
+        }
+        info = { state: "error", error: String(e.message || e), at: Date.now() };
+        if (++consecutiveErrors >= 5) pausedUntil = Date.now() + 10 * 60e3;
+      }
+      countries.set(h, info);
+      saveCountry(h, info);
+      rerenderHandle(h);
+      await sleep(LOOKUP_GAP_MS);
+    }
+  } finally {
+    lookupRunning = false;
+  }
+}
+
+const countryDirty = new Map();
+let countrySaveTimer = null;
+function saveCountry(h, info) {
+  if (info.state !== "done" && info.state !== "none") return;
+  countryDirty.set(h, info);
+  clearTimeout(countrySaveTimer);
+  countrySaveTimer = setTimeout(() => {
+    chrome.storage.local.get({ xpeCountry: {} }, ({ xpeCountry }) => {
+      for (const [k, v] of countryDirty) xpeCountry[k] = v;
+      countryDirty.clear();
+      for (const [k, v] of Object.entries(xpeCountry)) if (Date.now() - v.at > COUNTRY_TTL_MS) delete xpeCountry[k];
+      chrome.storage.local.set({ xpeCountry });
+    });
+  }, 2000);
+}
+
+// Test button on the settings page (forwarded here by the background worker).
+chrome.runtime.onMessage.addListener((msg, _sender, send) => {
+  if (msg.type !== "countryTest") return;
+  lookupCountry(msg.handle.trim().replace(/^@/, "").toLowerCase()).then(
+    (result) => send({ ok: true, result }),
+    (e) => send({ ok: false, error: String(e.message || e) }),
+  );
+  return true;
+});
+
 // ---------- rendering ----------
 
 const stop = (e) => {
@@ -142,7 +297,26 @@ function chips(rec, c, decision, isRevealed) {
   const box = document.createElement("span");
   box.className = "xpe-chips";
   if (settings.chips.kind) box.append(chip(rec.kind, "xpe-kind"));
-  if (!settings.enabled || !rec.text) return box;
+  const showCountry = settings.country.enabled && settings.country.chip;
+  if (showCountry) {
+    const k = countries.get(rec.handle.toLowerCase());
+    if (k?.state === "done") {
+      const title = k.accurate ? `Account based in ${k.name}` : `Account based in ${k.name}; X says this may be inaccurate (e.g. VPN)`;
+      box.append(chip(`📍 ${k.name}${k.accurate ? "" : " ?"}`, "xpe-country", title));
+    } else if (!k || k.state === "pending") {
+      const waiting = lookupQueue.length;
+      const paused = pausedUntil > Date.now() ? ` Paused until ${new Date(pausedUntil).toLocaleTimeString()}.` : "";
+      box.append(chip("📍…", "xpe-pending", `Looking up where the account is based (${waiting} accounts waiting, about 1.5 s each).${paused}`));
+    } else if (k.state === "error") {
+      box.append(chip("📍!", "xpe-error", k.error));
+    }
+  }
+  // Country matches are already visible in the 📍 label; show other rule labels below.
+  const ruleLabels = decision.reasons.filter((r) => !(showCountry && r.rule === "country"));
+  if (!settings.enabled || !rec.text) {
+    for (const r of ruleLabels) box.append(chip(r.short, "xpe-flag xpe-likely", r.name));
+    return box;
+  }
 
   if (!c || c.state === "pending") {
     box.append(chip("…", "xpe-pending", "Classifying"));
@@ -153,7 +327,7 @@ function chips(rec, c, decision, isRevealed) {
     if (settings.chips.tone) box.append(chip(a.tone.choice, "xpe-tone-" + a.tone.choice, `Tone · ${XPE.pct(a.tone.confidence)} confidence`));
     if (settings.chips.type) box.append(chip(a.post_type.choice.replace("_", " "), "xpe-type", "Post type"));
     if (settings.chips.quality) box.append(chip(`arg ${a.argument_quality.score.toFixed(1)}/4`, "xpe-quality", "Argument quality (0–4)"));
-    for (const r of decision.reasons) {
+    for (const r of ruleLabels) {
       const title = (r.level === "likely" ? "Likely: " : "Possibly: ") + r.name.toLowerCase();
       box.append(chip(r.short + (r.prob != null ? " " + XPE.pct(r.prob) : ""), "xpe-flag xpe-" + r.level, title));
     }
@@ -193,13 +367,19 @@ function marker(rec, reasons, action) {
 
 function render(article, rec) {
   const c = cls.get(rec.id);
-  const decision = settings.enabled && c?.state === "done" ? XPE.decide(settings, c.result.answers) : { action: "none", reasons: [] };
+  const k = countries.get(rec.handle.toLowerCase());
+  const answers = settings.enabled && c?.state === "done" ? c.result.answers : null;
+  const ctx = { country: k?.state === "done" ? k.name : null, accurate: k?.accurate, kind: rec.kind };
+  const decision = XPE.decide(settings, answers, ctx);
   const isRevealed = revealed.has(rec.id);
   let action = decision.action;
   if (isRevealed && (action === "hide" || action === "blur")) action = "label";
 
   // Skip DOM work when nothing changed (also keeps our own edits from retriggering the observer).
-  const sig = [c?.state, action, isRevealed, settings.enabled, JSON.stringify(settings.chips), decision.reasons.map((r) => r.rule + r.level).join()].join("|");
+  const sig = [
+    c?.state, action, isRevealed, settings.enabled, JSON.stringify(settings.chips), settings.country.enabled && settings.country.chip,
+    `${k?.state}:${k?.name}`, decision.reasons.map((r) => r.rule + r.level).join(),
+  ].join("|");
   const host = article.querySelector(SEL.userName);
   const needsMarker = action === "hide" || action === "blur";
   const intact =
@@ -220,6 +400,13 @@ function render(article, rec) {
 function rerenderId(id) {
   for (const article of document.querySelectorAll(SEL.post)) {
     if (permalink(article)?.id === id && seen.has(id)) render(article, seen.get(id));
+  }
+}
+
+function rerenderHandle(h) {
+  for (const article of document.querySelectorAll(SEL.post)) {
+    const id = permalink(article)?.id;
+    if (id && seen.get(id)?.handle.toLowerCase() === h) render(article, seen.get(id));
   }
 }
 
@@ -244,6 +431,7 @@ function scan() {
     }
     const cur = seen.get(rec.id);
     requestClassification(cur);
+    requestCountry(cur.handle);
     render(article, cur);
   }
   if (added) scheduleSave();

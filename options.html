@@ -19,6 +19,8 @@
   #status { position: fixed; top: 12px; right: 16px; background: #00ba7c; color: #fff; padding: 4px 10px; border-radius: 9999px; opacity: 0; transition: opacity .2s; }
   #status.on { opacity: 1; }
   .result { font-size: 12px; color: #536471; margin-left: 8px; }
+  .seen { display: inline-block; margin: 2px 4px 2px 0; padding: 0 8px; border-radius: 9999px; background: #eff3f4; cursor: pointer; font-size: 12px; color: #0f1419; }
+  .seen:hover { background: #e1e8ed; }
 </style>
 </head>
 <body>
@@ -55,10 +57,32 @@
     <span id="lqAction"></span>
   </p>
 
+  <h2>Account location</h2>
+  <p class="sub">Uses X's "About this account" information (where X says an account is based) to label posts or filter accounts from countries you choose.</p>
+  <p class="warn">This looks up each new account through an unofficial X interface using your logged-in session: one request per account, spaced 1.5 s apart, saved for 30 days. X could rate-limit or flag your account, and the lookup may stop working if X changes it.</p>
+  <label><input type="checkbox" id="cEnabled"> Look up where accounts are based</label>
+  <label><input type="checkbox" id="cChip"> Show 📍 location label</label>
+  <p>
+    Countries to filter (one per line, spelled as X shows them, e.g. <i>United States</i>):<br>
+    <textarea id="cList" rows="5" cols="40"></textarea>
+  </p>
+  <p>
+    Action: <span id="cAction"></span>
+    Apply to: <select id="cScope"><option value="all">posts and replies</option><option value="replies">replies only</option></select>
+  </p>
+  <label><input type="checkbox" id="cInaccurate"> Also match when X says the location may be inaccurate (VPN or proxy)</label>
+  <p>Countries seen so far (click to add): <span id="cSeen" class="sub">none yet</span></p>
+  <p>
+    Test with a handle: <input type="text" id="cTestHandle" placeholder="@handle" style="width:160px">
+    <button id="cTest">Look up</button>
+    <span id="cTestResult" class="result"></span>
+  </p>
+
   <h2>Data</h2>
   <p>
     <span id="cacheInfo"></span>
     <button id="clearCache">Clear saved classifications</button>
+    <button id="clearCountries">Clear saved account locations</button>
     <button id="resetSettings">Reset settings to defaults</button>
   </p>
 

@@ -22,6 +22,7 @@
 .xpe-tone-insulting { background: rgba(244, 33, 46, 0.12); color: rgb(244, 33, 46); }
 .xpe-tone-critical { background: rgba(255, 122, 0, 0.14); color: rgb(222, 108, 0); }
 .xpe-tone-friendly { background: rgba(0, 186, 124, 0.14); color: rgb(0, 160, 106); }
+.xpe-country { background: rgba(120, 86, 255, 0.13); color: rgb(120, 86, 255); }
 .xpe-flag.xpe-likely { background: rgb(244, 33, 46); color: #fff; }
 .xpe-flag.xpe-possible { background: rgba(255, 173, 31, 0.25); color: rgb(196, 120, 0); }
 .xpe-rehide { cursor: pointer; text-decoration: underline; }

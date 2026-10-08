@@ -67,6 +67,19 @@ function render() {
     body.append(tr);
   }
 
+  const cf = settings.country;
+  $("#cEnabled").checked = cf.enabled;
+  $("#cChip").checked = cf.chip;
+  $("#cList").value = cf.countries.join("\n");
+  $("#cScope").value = cf.scope;
+  $("#cInaccurate").checked = cf.includeInaccurate;
+  $("#cAction").replaceChildren(
+    actionSelect(cf.action, (v) => {
+      cf.action = v;
+      save();
+    }),
+  );
+
   $("#lqMax").value = settings.lowQuality.maxScore;
   $("#lqAction").replaceChildren(
     actionSelect(settings.lowQuality.action, (v) => {
@@ -77,8 +90,31 @@ function render() {
 }
 
 function refreshCacheInfo() {
-  chrome.storage.local.get({ xpeClass: {} }, ({ xpeClass }) => {
-    $("#cacheInfo").textContent = `${Object.keys(xpeClass).length} posts classified and saved. `;
+  chrome.storage.local.get({ xpeClass: {}, xpeCountry: {} }, ({ xpeClass, xpeCountry }) => {
+    const located = Object.values(xpeCountry);
+    $("#cacheInfo").textContent =
+      `${Object.keys(xpeClass).length} posts classified and ${located.length} account locations saved. `;
+
+    // Countries seen, most common first, clickable to add to the filter list.
+    const counts = {};
+    for (const v of located) if (v.name) counts[v.name] = (counts[v.name] || 0) + 1;
+    const seen = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    if (!seen.length) return;
+    $("#cSeen").replaceChildren(
+      ...seen.map(([name, n]) => {
+        const s = document.createElement("span");
+        s.className = "seen";
+        s.textContent = `${name} (${n})`;
+        s.onclick = () => {
+          if (!settings.country.countries.some((c) => c.toLowerCase() === name.toLowerCase())) {
+            settings.country.countries.push(name);
+            $("#cList").value = settings.country.countries.join("\n");
+            save();
+          }
+        };
+        return s;
+      }),
+    );
   });
 }
 
@@ -114,6 +150,42 @@ $("#testKey").onclick = () => {
   });
 };
 $("#clearCache").onclick = () => chrome.runtime.sendMessage({ type: "clearCache" }, refreshCacheInfo);
+$("#clearCountries").onclick = () => chrome.runtime.sendMessage({ type: "clearCountries" }, refreshCacheInfo);
+
+$("#cEnabled").onchange = (e) => {
+  settings.country.enabled = e.target.checked;
+  save();
+};
+$("#cChip").onchange = (e) => {
+  settings.country.chip = e.target.checked;
+  save();
+};
+$("#cInaccurate").onchange = (e) => {
+  settings.country.includeInaccurate = e.target.checked;
+  save();
+};
+$("#cScope").onchange = (e) => {
+  settings.country.scope = e.target.value;
+  save();
+};
+$("#cList").onchange = (e) => {
+  settings.country.countries = [...new Set(e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean))];
+  e.target.value = settings.country.countries.join("\n");
+  save();
+};
+$("#cTest").onclick = () => {
+  const handle = $("#cTestHandle").value.trim();
+  if (!handle) return;
+  $("#cTestResult").textContent = "Looking up…";
+  chrome.runtime.sendMessage({ type: "countryTest", handle }, (res) => {
+    if (!res?.ok) return ($("#cTestResult").textContent = "Failed: " + (res?.error || chrome.runtime.lastError?.message));
+    const r = res.result;
+    $("#cTestResult").textContent =
+      r.state === "done"
+        ? `Based in ${r.name}${r.accurate ? "" : " (X says this may be inaccurate)"}`
+        : "X shows no location for this account.";
+  });
+};
 $("#resetSettings").onclick = () => {
   settings = structuredClone(XPE.DEFAULTS);
   save();

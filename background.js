@@ -185,6 +185,50 @@ async function classify(post) {
   return p;
 }
 
+// --- X web-client config for the "About this account" lookup ---
+// The web app's bearer token is public (embedded in X's main script for every visitor) and the
+// persisted query ID changes with deploys, so both are read from X's own scripts at runtime.
+const FALLBACK_ABOUT_QUERY_ID = "TzOG2twZEfhr9KmClvVVqA"; // AboutAccountQuery as of 2026-10-08
+
+async function xConfig({ mainUrl, chunkUrl }) {
+  const { xpeXConfig } = await chrome.storage.local.get("xpeXConfig");
+  if (xpeXConfig?.bearer && xpeXConfig.mainUrl === mainUrl && xpeXConfig.chunkUrl === chunkUrl) return xpeXConfig;
+  if (!mainUrl) throw new Error("Couldn't find X's main script on the page");
+  const main = await (await fetch(mainUrl)).text();
+  const bearer = main.match(/"Bearer (AAAA[A-Za-z0-9%]+)"/)?.[1];
+  if (!bearer) throw new Error("Couldn't find X's web access token in its main script");
+  let queryId = FALLBACK_ABOUT_QUERY_ID;
+  if (chunkUrl) {
+    try {
+      const chunk = await (await fetch(chunkUrl)).text();
+      queryId = chunk.match(/id:"([\w-]+)",metadata:\{\},name:"AboutAccountQuery"/)?.[1] || queryId;
+    } catch {}
+  }
+  const cfg = { mainUrl, chunkUrl, bearer, queryId, at: Date.now() };
+  await chrome.storage.local.set({ xpeXConfig: cfg });
+  return cfg;
+}
+
+// The lookup must run in an x.com tab (it uses the logged-in session), so the settings
+// page's test button is forwarded to one.
+async function countryTest(handle) {
+  const tabs = await chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] });
+  if (!tabs.length) throw new Error("Open x.com in a tab first, then test again.");
+  // Tabs opened before the extension was (re)loaded have no content script; try each, active first.
+  tabs.sort((a, b) => b.active - a.active || b.lastAccessed - a.lastAccessed);
+  for (const tab of tabs) {
+    let res;
+    try {
+      res = await chrome.tabs.sendMessage(tab.id, { type: "countryTest", handle });
+    } catch {
+      continue; // no content script in this tab
+    }
+    if (!res?.ok) throw new Error(res?.error || "The x.com tab didn't return a result.");
+    return res.result;
+  }
+  throw new Error("Your x.com tab is running an older copy of the extension. Reload the x.com tab and try again.");
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, send) => {
   const reply = (promise) => {
     promise.then((result) => send({ ok: true, result }), (e) => send({ ok: false, error: String(e?.message || e) }));
@@ -194,6 +238,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, send) => {
   if (msg.type === "test") {
     return reply(callJev({ id: "test", handle: "test", text: msg.text || "Thanks everyone for the kind words today!" }));
   }
+  if (msg.type === "xconfig") return reply(xConfig(msg));
+  if (msg.type === "countryTest") return reply(countryTest(msg.handle));
+  if (msg.type === "clearCountries") return reply(chrome.storage.local.set({ xpeCountry: {} }));
   if (msg.type === "clearCache") {
     cache = {};
     return reply(chrome.storage.local.set({ xpeClass: {} }));

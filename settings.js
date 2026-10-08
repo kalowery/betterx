@@ -30,6 +30,16 @@ globalThis.XPE = {
       insulting: { likely: { threshold: 0.7, action: "label" }, possible: { threshold: 0.4, action: "none" } },
     },
     lowQuality: { action: "none", maxScore: 0.5 },
+    // Filter by the country X reports in "About this account". Off by default because it
+    // makes extra (unofficial) requests to X with the user's logged-in session.
+    country: {
+      enabled: false,
+      chip: true,
+      countries: [], // country names as X shows them, e.g. "United States"
+      action: "hide",
+      scope: "all", // "all" posts and replies, or only "replies"
+      includeInaccurate: true, // also match when X says the location may be inaccurate (e.g. VPN)
+    },
   },
 
   merge(base, over) {
@@ -48,24 +58,38 @@ globalThis.XPE = {
     return answers[rule]?.noul ?? 0;
   },
 
-  // Which rules fire for a classified post, and the most severe resulting action.
-  decide(settings, answers) {
+  // Which rules fire for a post, and the most severe resulting action.
+  // `answers` (Jev) and `ctx` ({ country, accurate, kind }) may each be missing.
+  decide(settings, answers, ctx = {}) {
     const reasons = [];
-    for (const [rule, name] of Object.entries(XPE.RULES)) {
-      const r = settings.rules[rule];
-      const p = XPE.probability(rule, answers);
-      const level = p >= r.likely.threshold ? "likely" : p >= r.possible.threshold ? "possible" : null;
-      if (level && r[level].action !== "none") {
-        reasons.push({ rule, name, short: XPE.SHORT[rule] || name, prob: p, level, action: r[level].action });
+    if (answers) {
+      for (const [rule, name] of Object.entries(XPE.RULES)) {
+        const r = settings.rules[rule];
+        const p = XPE.probability(rule, answers);
+        const level = p >= r.likely.threshold ? "likely" : p >= r.possible.threshold ? "possible" : null;
+        if (level && r[level].action !== "none") {
+          reasons.push({ rule, name, short: XPE.SHORT[rule] || name, prob: p, level, action: r[level].action });
+        }
+      }
+      const q = answers.argument_quality?.score;
+      const lq = settings.lowQuality;
+      if (lq.action !== "none" && q != null && q <= lq.maxScore) {
+        reasons.push({ rule: "lowQuality", name: "Weak argument", short: "Weak argument", prob: null, level: "likely", action: lq.action });
       }
     }
-    const q = answers.argument_quality?.score;
-    const lq = settings.lowQuality;
-    if (lq.action !== "none" && q != null && q <= lq.maxScore) {
-      reasons.push({ rule: "lowQuality", name: "Weak argument", short: "Weak argument", prob: null, level: "likely", action: lq.action });
+    const cf = settings.country;
+    if (cf.enabled && ctx.country && cf.action !== "none" && XPE.countryMatches(cf, ctx)) {
+      reasons.push({ rule: "country", name: `Account based in ${ctx.country}`, short: ctx.country, prob: null, level: "likely", action: cf.action });
     }
     const action = reasons.reduce((m, r) => (XPE.SEVERITY[r.action] > XPE.SEVERITY[m] ? r.action : m), "none");
     return { action, reasons };
+  },
+
+  countryMatches(cf, ctx) {
+    if (cf.scope === "replies" && ctx.kind !== "reply") return false;
+    if (ctx.accurate === false && !cf.includeInaccurate) return false;
+    const c = ctx.country.toLowerCase();
+    return cf.countries.some((x) => x.trim().toLowerCase() === c);
   },
 
   pct: (p) => Math.round(p * 100) + "%",
